@@ -1,1 +1,686 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>White 6 - 精簡日期排版版</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background-color: #1a1a1a;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            overflow-x: hidden;
+        }
 
+        #app-wrapper {
+            width: 100%;
+            max-width: 1024px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* 16:9 畫布容器 */
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            background: #050505;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            touch-action: none;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* 操作面板 */
+        #control-panel {
+            width: 100%;
+            background: #262626;
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 12px;
+            width: 100%;
+            align-items: center;
+        }
+        
+        input[type="text"] {
+            flex: 1;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 12px 14px;
+            color: #fff;
+            border-radius: 6px;
+            font-size: 15px;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #ffb74d;
+            background: rgba(255,255,255,0.12);
+        }
+
+        /* 日期選項樣式 */
+        .options-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #ccc;
+            user-select: none;
+            cursor: pointer;
+        }
+        .options-row input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: #ffb74d;
+            cursor: pointer;
+        }
+        
+        .button-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            width: 100%;
+        }
+
+        button {
+            flex: 1;
+            min-width: 120px;
+            background: #ffb74d;
+            color: #2c1d11;
+            border: none;
+            padding: 12px 20px;
+            font-weight: bold;
+            font-size: 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            white-space: nowrap;
+        }
+        button:hover {
+            background: #ffa726;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        
+        #record-btn {
+            background: #e53935;
+            color: #fff;
+        }
+        #record-btn:hover {
+            background: #d32f2f;
+        }
+        #share-btn {
+            background: #29b6f6;
+            color: #fff;
+        }
+        #share-btn:hover {
+            background: #039be5;
+        }
+        #reset-btn {
+            background: #444;
+            color: #eee;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        #reset-btn:hover {
+            background: #555;
+        }
+
+        #recording-status {
+            display: none;
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(229, 57, 53, 0.85);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: bold;
+            align-items: center;
+            gap: 6px;
+            pointer-events: none;
+            animation: pulse 1.5s infinite;
+            z-index: 10;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+        }
+
+        @media (max-width: 768px) {
+            .input-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="app-wrapper">
+        <div id="canvas-container">
+            <div id="recording-status">● 錄影中...</div>
+        </div>
+        
+        <div id="control-panel">
+            <div class="input-row">
+                <input type="text" id="message-input" value="蝴蝶飛舞 White 6" placeholder="輸入長訊息...">
+            </div>
+            
+            <label class="options-row">
+                <input type="checkbox" id="append-date-checkbox">
+                <span>在訊息後方自動加上今天的「日期與星期」</span>
+            </label>
+
+            <div class="button-row">
+                <button id="start-btn">自動展示</button>
+                <button id="record-btn">展示並錄影</button>
+                <button id="share-btn">分享此訊息</button>
+                <button id="reset-btn">重置</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 解析 URL 分享功能與 Checkbox 狀態 ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const sharedMsg = urlParams.get('msg');
+        const sharedDate = urlParams.get('date');
+        
+        const msgInput = document.getElementById('message-input');
+        const dateCheckbox = document.getElementById('append-date-checkbox');
+
+        if (sharedMsg) msgInput.value = decodeURIComponent(sharedMsg);
+        if (sharedDate === '1') dateCheckbox.checked = true;
+
+        // --- 初始化 Three.js 環境 ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        
+        const viewW = 16;
+        const viewH = 9;
+        const camera = new THREE.OrthographicCamera(-viewW/2, viewW/2, viewH/2, -viewH/2, 0.1, 1000);
+        camera.position.set(0, 0, 10);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffe0b2, 0.6);
+        dirLight.position.set(5, 5, 10);
+        scene.add(dirLight);
+
+        // --- 全域參數設定 ---
+        let butterflies = [];
+        let woodBoard;
+        let textTexture, textMaterial;
+        let textMesh;
+        
+        let boardWidth = 48; 
+        const boardHeight = 9; 
+        const totalButterflyCount = 1200; 
+        
+        let isAnimating = false;
+        let camTargetX = 0; 
+        let currentCamX = 0;
+        let scanLineX = -viewW/2; 
+        let maxCamX = boardWidth - viewW;
+
+        let charLayoutData = [];
+
+        // 錄影變數
+        let mediaRecorder;
+        let recordedChunks = [];
+        let isRecording = false;
+        const recStatusIndicator = document.getElementById('recording-status');
+
+        // --- 修改：格式化為不補零的 "M/D 星期X" 格式 ---
+        function getFormattedDateString() {
+            const now = new Date();
+            const month = now.getMonth() + 1; // 不補零，直接取數字
+            const date = now.getDate();       // 不補零，直接取數字
+            const dayNames = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+            const dayName = dayNames[now.getDay()];
+            
+            // 返回如 " 5/21 星期四" (前面帶一個空格做微幅視覺視覺隔離)
+            return ` ${month}/${date} ${dayName}`;
+        }
+
+        function getFinalRenderText() {
+            let baseText = msgInput.value;
+            if (dateCheckbox.checked) {
+                baseText += getFormattedDateString();
+            }
+            return baseText;
+        }
+
+        // --- 1. 全動態字距排版與 Canvas 繪製 ---
+        const canvasHeight = 512;
+        const fontStyle = 'bold 380px "PingFang TC", "Microsoft JhengHei", sans-serif';
+        const pixelsToWorld = 8 / 512; 
+
+        function createDynamicTextTexture(text) {
+            const calcCanvas = document.createElement('canvas');
+            const calcCtx = calcCanvas.getContext('2d');
+            calcCtx.font = fontStyle;
+
+            charLayoutData = [];
+            let currentXOffset = 180; 
+
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                let metrics = calcCtx.measureText(char);
+                let charW = metrics.width;
+
+                // 針對精簡日期的斜線「/」與數字進行特製寬度微調，使排版更緊湊
+                if (charW < 140) {
+                    if (char === ' ') charW = 140;
+                    else if (char === '/') charW = 100; // 斜線可以更窄
+                    else charW = 130; // 數字
+                }
+
+                charLayoutData.push({
+                    char: char,
+                    pixelX: currentXOffset + (charW / 2),
+                    pixelW: charW
+                });
+
+                currentXOffset += charW; 
+            }
+
+            const totalPixelWidth = currentXOffset + 180; 
+
+            const canvas = document.createElement('canvas');
+            canvas.width = totalPixelWidth;
+            canvas.height = canvasHeight;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = 'rgba(245, 245, 240, 0.95)';
+            ctx.font = fontStyle;
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'center';
+            
+            ctx.shadowColor = 'rgba(0,0,0,0.6)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetX = 5;
+            ctx.shadowOffsetY = 5;
+
+            charLayoutData.forEach(item => {
+                ctx.fillText(item.char, item.pixelX, canvas.height / 2);
+            });
+            
+            return {
+                texture: new THREE.CanvasTexture(canvas),
+                calculatedWidth: totalPixelWidth * pixelsToWorld
+            };
+        }
+
+        function setupScenePlanes() {
+            const finalProcessedText = getFinalRenderText();
+            const result = createDynamicTextTexture(finalProcessedText || " ");
+            boardWidth = Math.max(result.calculatedWidth, viewW); 
+            maxCamX = boardWidth - viewW;
+
+            if (woodBoard) scene.remove(woodBoard);
+            if (textMesh) scene.remove(textMesh);
+            if (textTexture) textTexture.dispose();
+
+            function createWoodTexture() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 1024;
+                canvas.height = 256;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#3d250e';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#291707';
+                for (let i = 0; i < 60; i++) {
+                    ctx.fillRect(0, Math.random() * 256, canvas.width, Math.random() * 4);
+                }
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.repeat.x = Math.ceil(boardWidth / 16); 
+                return texture;
+            }
+
+            const woodGeo = new THREE.PlaneGeometry(boardWidth, boardHeight);
+            const woodMat = new THREE.MeshStandardMaterial({ map: createWoodTexture(), roughness: 0.85 });
+            woodBoard = new THREE.Mesh(woodGeo, woodMat);
+            woodBoard.position.set(boardWidth / 2 - viewW / 2, 0, -0.05); 
+            scene.add(woodBoard);
+
+            textTexture = result.texture;
+            const textGeo = new THREE.PlaneGeometry(boardWidth, boardHeight);
+            textMaterial = new THREE.MeshBasicMaterial({ map: textTexture, transparent: true, opacity: 1 });
+            textMesh = new THREE.Mesh(textGeo, textMaterial);
+            textMesh.position.set(boardWidth / 2 - viewW / 2, 0, -0.02);
+            scene.add(textMesh);
+        }
+
+        // --- 2. 3D 超大巨蝶生成 ---
+        function createButterflyMesh() {
+            const group = new THREE.Group();
+            const h = Math.random() * 0.15 + (Math.random() > 0.5 ? 0.02 : 0.55);
+            const wingMat = new THREE.MeshStandardMaterial({
+                color: new THREE.Color().setHSL(h, 0.9, 0.55), 
+                side: THREE.DoubleSide,
+                roughness: 0.3
+            });
+
+            const leftWingGeo = new THREE.BufferGeometry();
+            const leftVertices = new Float32Array([
+                0, 0, 0,  -0.90, 1.00, 0.15,  -1.20, 0, 0,
+                0, 0, 0,  -1.20, 0, 0,        -0.70, -0.70, -0.05
+            ]);
+            leftWingGeo.setAttribute('position', new THREE.BufferAttribute(leftVertices, 3));
+            leftWingGeo.computeVertexNormals();
+            const leftWing = new THREE.Mesh(leftWingGeo, wingMat);
+            
+            const rightWingGeo = new THREE.BufferGeometry();
+            const rightVertices = new Float32Array([
+                0, 0, 0,   1.20, 0, 0,         0.90, 1.00, 0.15,
+                0, 0, 0,   0.70, -0.70, -0.05,  1.20, 0, 0
+            ]);
+            rightWingGeo.setAttribute('position', new THREE.BufferAttribute(rightVertices, 3));
+            rightWingGeo.computeVertexNormals();
+            const rightWing = new THREE.Mesh(rightWingGeo, wingMat);
+
+            group.add(leftWing);
+            group.add(rightWing);
+            
+            const scale = Math.random() * 0.25 + 0.95; 
+            group.scale.set(scale, scale, scale);
+
+            return {
+                mesh: group, leftWing, rightWing,
+                wingSpeed: Math.random() * 10 + 11,
+                wingPhase: Math.random() * Math.PI,
+                hoverOffset: Math.random() * Math.PI
+            };
+        }
+
+        function initButterflies() {
+            butterflies.forEach(b => scene.remove(b.mesh));
+            butterflies = [];
+
+            const charCount = charLayoutData.length;
+            if (charCount === 0) return;
+
+            const perCharCount = Math.floor(totalButterflyCount / charCount);
+            const startX = -viewW / 2;
+
+            charLayoutData.forEach(item => {
+                const charWorldX = startX + (item.pixelX * pixelsToWorld);
+                const charWorldW = item.pixelW * pixelsToWorld;
+
+                for (let i = 0; i < perCharCount; i++) {
+                    const b = createButterflyMesh();
+                    
+                    const posX = charWorldX + (Math.random() - 0.5) * (charWorldW * 1.35);
+                    const posY = (Math.random() - 0.5) * (boardHeight + 0.2); 
+                    const posZ = 0.01 + Math.random() * 0.45;
+
+                    b.mesh.position.set(posX, posY, posZ);
+                    
+                    b.mesh.rotation.x = (Math.random() - 0.5) * 0.35;
+                    b.mesh.rotation.y = (Math.random() - 0.5) * 0.35;
+                    b.mesh.rotation.z = (Math.random() - 0.5) * 2.2; 
+
+                    b.originX = posX;
+                    b.originY = posY;
+                    b.originZ = posZ;
+                    
+                    const angle = Math.atan2(posY, posX - (startX + boardWidth/2)) + (Math.random() - 0.5) * 0.6;
+                    b.vX = Math.cos(angle) * (Math.random() * 5 + 5) - 2.5; 
+                    b.vY = Math.sin(angle) * (Math.random() * 5 + 5);
+                    b.vZ = Math.random() * 5 + 7; 
+
+                    b.interrupted = false;
+                    b.interruptTime = 0;
+
+                    scene.add(b.mesh);
+                    butterflies.push(b);
+                }
+            });
+        }
+
+        // --- 3. 全線性流暢動態循環 ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const delta = clock.getDelta();
+            const time = clock.getElapsedTime();
+
+            if (isAnimating) {
+                camTargetX += delta * 4.8; 
+                if (camTargetX >= maxCamX) {
+                    camTargetX = maxCamX;
+                    if (isRecording && scanLineX > boardWidth - viewW/2 + 5) {
+                        stopRecordingAndDownload();
+                    }
+                }
+                scanLineX = currentCamX + (viewW / 2) - 0.5;
+            }
+
+            currentCamX += (camTargetX - currentCamX) * 0.1;
+            camera.position.x = currentCamX;
+
+            butterflies.forEach(b => {
+                const isFlying = b.interrupted || (scanLineX > b.originX);
+                
+                let currentSpeed = b.wingSpeed;
+                if (isFlying) currentSpeed *= 2.8;
+
+                const wingAngle = Math.sin(time * currentSpeed + b.wingPhase) * 0.65;
+                b.leftWing.rotation.y = wingAngle;
+                b.rightWing.rotation.y = -wingAngle;
+
+                if (isFlying) {
+                    if (!b.interrupted) {
+                        b.interrupted = true;
+                        b.vX = -Math.random() * 4 - 2.5; 
+                        b.vY = (b.originY * 2.0) + (Math.random() - 0.5) * 4;
+                        b.vZ = Math.random() * 5 + 7;
+                    }
+                    
+                    b.interruptTime += delta;
+                    const t = b.interruptTime;
+                    
+                    b.mesh.position.x = b.originX + b.vX * t;
+                    b.mesh.position.y = b.originY + b.vY * t;
+                    b.mesh.position.z = b.originZ + b.vZ * t;
+                    b.mesh.rotation.x += delta * 3;
+                    b.mesh.rotation.y += delta * 5;
+                } else {
+                    const hoverY = Math.sin(time * 1.5 + b.hoverOffset) * 0.04;
+                    const hoverX = Math.cos(time * 0.8 + b.hoverOffset) * 0.02;
+                    b.mesh.position.y = b.originY + hoverY;
+                    b.mesh.position.x = b.originX + hoverX;
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        // --- 4. 互動事件 ---
+        function handleInteraction(clientX, clientY) {
+            const rect = container.getBoundingClientRect();
+            const mouseX = clientX - rect.left;
+            const mouseY = clientY - rect.top;
+
+            const worldX = ((mouseX / rect.width) - 0.5) * viewW + currentCamX;
+            const worldY = -((mouseY / rect.height) - 0.5) * viewH;
+
+            const disturbRadius = 4.5; 
+
+            butterflies.forEach(b => {
+                if (!b.interrupted) {
+                    const dx = b.mesh.position.x - worldX;
+                    const dy = b.mesh.position.y - worldY;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < disturbRadius) {
+                        b.interrupted = true;
+                        const angle = Math.atan2(dy, dx);
+                        b.vX = Math.cos(angle) * (8 - dist);
+                        b.vY = Math.sin(angle) * (8 - dist);
+                        b.vZ = Math.random() * 6 + 6;
+                    }
+                }
+            });
+            isAnimating = true;
+        }
+
+        container.addEventListener('mousedown', (e) => handleInteraction(e.clientX, e.clientY));
+        container.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 0) handleInteraction(e.touches[0].clientX, e.touches[0].clientY);
+        });
+
+        // --- 5. 原生錄影機制 ---
+        function startRecording() {
+            recordedChunks = [];
+            const stream = renderer.domElement.captureStream(30);
+            let options = { mimeType: 'video/mp4; codecs=vp9' };
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                options = { mimeType: 'video/webm; codecs=vp9' };
+            }
+
+            mediaRecorder = new MediaRecorder(stream, options);
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `butterfly-reveal.${mediaRecorder.mimeType.includes('mp4') ? 'mp4' : 'webm'}`;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                }, 100);
+            };
+
+            mediaRecorder.start();
+            isRecording = true;
+            recStatusIndicator.style.display = 'flex';
+        }
+
+        function stopRecordingAndDownload() {
+            if (isRecording && mediaRecorder) {
+                mediaRecorder.stop();
+                isRecording = false;
+                recStatusIndicator.style.display = 'none';
+            }
+        }
+
+        // --- 6. UI 控制項 ---
+        const startBtn = document.getElementById('start-btn');
+        const recordBtn = document.getElementById('record-btn');
+        const shareBtn = document.getElementById('share-btn');
+        const resetBtn = document.getElementById('reset-btn');
+
+        dateCheckbox.addEventListener('change', () => {
+            isAnimating = false;
+            camTargetX = 0; currentCamX = 0; camera.position.x = 0;
+            scanLineX = -viewW/2;
+            setupScenePlanes();
+            initButterflies();
+        });
+
+        // 初始化場景與排版
+        setupScenePlanes();
+        initButterflies();
+        animate();
+
+        startBtn.addEventListener('click', () => {
+            setupScenePlanes();
+            initButterflies(); 
+            isAnimating = true;
+        });
+
+        recordBtn.addEventListener('click', () => {
+            isAnimating = false;
+            camTargetX = 0; currentCamX = 0; camera.position.x = 0;
+            scanLineX = -viewW/2;
+            setupScenePlanes();
+            initButterflies();
+            
+            setTimeout(() => {
+                startRecording();
+                isAnimating = true;
+            }, 100);
+        });
+
+        shareBtn.addEventListener('click', () => {
+            const textValue = msgInput.value.trim();
+            const encodedText = encodeURIComponent(textValue);
+            const dateFlag = dateCheckbox.checked ? '1' : '0';
+            const shareUrl = `${window.location.origin}${window.location.pathname}?msg=${encodedText}&date=${dateFlag}`;
+            
+            navigator.clipboard.writeText(shareUrl).then(() => {
+                const infoText = dateCheckbox.checked ? `「${textValue} + 精簡日期」` : `「${textValue}」`;
+                alert(`連結已複製！傳給朋友打開即可直接觀看：${infoText}`);
+            }).catch(err => {
+                alert(`複製失敗，請手動複製此網址：\n${shareUrl}`);
+            });
+        });
+
+        resetBtn.addEventListener('click', () => {
+            stopRecordingAndDownload();
+            isAnimating = false;
+            camTargetX = 0;
+            currentCamX = 0;
+            camera.position.x = 0;
+            scanLineX = -viewW/2;
+            setupScenePlanes();
+            initButterflies();
+        });
+
+        window.addEventListener('resize', () => {
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+    </script>
+</body>
+</html>

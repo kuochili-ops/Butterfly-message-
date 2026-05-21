@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>White 6 - 精簡日期排版版</title>
+    <title>White 6 - 錄影自動完美收尾版</title>
     <style>
         * {
             box-sizing: border-box;
@@ -263,21 +263,21 @@
 
         let charLayoutData = [];
 
-        // 錄影變數
+        // 錄影相關全域變數
         let mediaRecorder;
         let recordedChunks = [];
         let isRecording = false;
+        let stopTimeoutActive = false; // 防止重複觸發停止機制
         const recStatusIndicator = document.getElementById('recording-status');
 
-        // --- 修改：格式化為不補零的 "M/D 星期X" 格式 ---
+        // --- 格式化日期格式： "M/D 星期X" ---
         function getFormattedDateString() {
             const now = new Date();
-            const month = now.getMonth() + 1; // 不補零，直接取數字
-            const date = now.getDate();       // 不補零，直接取數字
+            const month = now.getMonth() + 1; 
+            const date = now.getDate();       
             const dayNames = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
             const dayName = dayNames[now.getDay()];
             
-            // 返回如 " 5/21 星期四" (前面帶一個空格做微幅視覺視覺隔離)
             return ` ${month}/${date} ${dayName}`;
         }
 
@@ -307,11 +307,10 @@
                 let metrics = calcCtx.measureText(char);
                 let charW = metrics.width;
 
-                // 針對精簡日期的斜線「/」與數字進行特製寬度微調，使排版更緊湊
                 if (charW < 140) {
                     if (char === ' ') charW = 140;
-                    else if (char === '/') charW = 100; // 斜線可以更窄
-                    else charW = 130; // 數字
+                    else if (char === '/') charW = 100; 
+                    else charW = 130; 
                 }
 
                 charLayoutData.push({
@@ -491,8 +490,14 @@
                 camTargetX += delta * 4.8; 
                 if (camTargetX >= maxCamX) {
                     camTargetX = maxCamX;
-                    if (isRecording && scanLineX > boardWidth - viewW/2 + 5) {
-                        stopRecordingAndDownload();
+                    
+                    // 核心修改：確認鏡頭在終點完全靜止，且正處於錄影狀態
+                    if (isRecording && !stopTimeoutActive && Math.abs(currentCamX - maxCamX) < 0.01) {
+                        stopTimeoutActive = true;
+                        // 留白定格 500 毫秒（0.5秒），使收尾影片不突兀，隨後自動停止並存檔
+                        setTimeout(() => {
+                            stopRecordingAndDownload();
+                        }, 500);
                     }
                 }
                 scanLineX = currentCamX + (viewW / 2) - 0.5;
@@ -575,6 +580,7 @@
         // --- 5. 原生錄影機制 ---
         function startRecording() {
             recordedChunks = [];
+            stopTimeoutActive = false; // 重置停止保護旗標
             const stream = renderer.domElement.captureStream(30);
             let options = { mimeType: 'video/mp4; codecs=vp9' };
             if (!MediaRecorder.isTypeSupported(options.mimeType)) {
@@ -610,6 +616,7 @@
             if (isRecording && mediaRecorder) {
                 mediaRecorder.stop();
                 isRecording = false;
+                stopTimeoutActive = false;
                 recStatusIndicator.style.display = 'none';
             }
         }
@@ -628,7 +635,6 @@
             initButterflies();
         });
 
-        // 初始化場景與排版
         setupScenePlanes();
         initButterflies();
         animate();
@@ -640,12 +646,15 @@
         });
 
         recordBtn.addEventListener('click', () => {
+            // 開始錄影前先重置所有狀態至初始最左側
             isAnimating = false;
+            stopTimeoutActive = false;
             camTargetX = 0; currentCamX = 0; camera.position.x = 0;
             scanLineX = -viewW/2;
             setupScenePlanes();
             initButterflies();
             
+            // 稍作延遲確保畫面重置完成後再開始擷取串流
             setTimeout(() => {
                 startRecording();
                 isAnimating = true;
@@ -659,8 +668,8 @@
             const shareUrl = `${window.location.origin}${window.location.pathname}?msg=${encodedText}&date=${dateFlag}`;
             
             navigator.clipboard.writeText(shareUrl).then(() => {
-                const infoText = dateCheckbox.checked ? `「${textValue} + 精簡日期」` : `「${textValue}」`;
-                alert(`連結已複製！傳給朋友打開即可直接觀看：${infoText}`);
+                const infoText = dateCheckbox.checked ? `「${textValue} + 日期」` : `「${textValue}」`;
+                alert(`自動收尾分享連結已複製！傳給朋友打開即可直接觀看：${infoText}`);
             }).catch(err => {
                 alert(`複製失敗，請手動複製此網址：\n${shareUrl}`);
             });

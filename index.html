@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>White 6 - 錄影自動完美收尾版</title>
+    <title>White 6 - 驚喜純享分享版</title>
     <style>
         * {
             box-sizing: border-box;
@@ -214,16 +214,23 @@
     </div>
 
     <script>
-        // --- 解析 URL 分享功能與 Checkbox 狀態 ---
+        // --- 核心：解析 URL 分享功能與隱藏面板控制 ---
         const urlParams = new URLSearchParams(window.location.search);
         const sharedMsg = urlParams.get('msg');
         const sharedDate = urlParams.get('date');
+        const hideUI = urlParams.get('hide'); // 新增隱藏參數檢測
         
         const msgInput = document.getElementById('message-input');
         const dateCheckbox = document.getElementById('append-date-checkbox');
+        const controlPanel = document.getElementById('control-panel');
 
         if (sharedMsg) msgInput.value = decodeURIComponent(sharedMsg);
         if (sharedDate === '1') dateCheckbox.checked = true;
+        
+        // 如果網址帶有 hide=1，則直接在 DOM 中拔掉控制台，達到完美的純享體驗
+        if (hideUI === '1') {
+            controlPanel.style.display = 'none';
+        }
 
         // --- 初始化 Three.js 環境 ---
         const container = document.getElementById('canvas-container');
@@ -263,11 +270,11 @@
 
         let charLayoutData = [];
 
-        // 錄影相關全域變數
+        // 錄影變數
         let mediaRecorder;
         let recordedChunks = [];
         let isRecording = false;
-        let stopTimeoutActive = false; // 防止重複觸發停止機制
+        let stopTimeoutActive = false;
         const recStatusIndicator = document.getElementById('recording-status');
 
         // --- 格式化日期格式： "M/D 星期X" ---
@@ -491,10 +498,8 @@
                 if (camTargetX >= maxCamX) {
                     camTargetX = maxCamX;
                     
-                    // 核心修改：確認鏡頭在終點完全靜止，且正處於錄影狀態
                     if (isRecording && !stopTimeoutActive && Math.abs(currentCamX - maxCamX) < 0.01) {
                         stopTimeoutActive = true;
-                        // 留白定格 500 毫秒（0.5秒），使收尾影片不突兀，隨後自動停止並存檔
                         setTimeout(() => {
                             stopRecordingAndDownload();
                         }, 500);
@@ -569,7 +574,7 @@
                     }
                 }
             });
-            isAnimating = true;
+            isAnimating = true; // 不管是點擊還是觸控，都將啟動推軌播放
         }
 
         container.addEventListener('mousedown', (e) => handleInteraction(e.clientX, e.clientY));
@@ -580,7 +585,7 @@
         // --- 5. 原生錄影機制 ---
         function startRecording() {
             recordedChunks = [];
-            stopTimeoutActive = false; // 重置停止保護旗標
+            stopTimeoutActive = false;
             const stream = renderer.domElement.captureStream(30);
             let options = { mimeType: 'video/mp4; codecs=vp9' };
             if (!MediaRecorder.isTypeSupported(options.mimeType)) {
@@ -646,7 +651,6 @@
         });
 
         recordBtn.addEventListener('click', () => {
-            // 開始錄影前先重置所有狀態至初始最左側
             isAnimating = false;
             stopTimeoutActive = false;
             camTargetX = 0; currentCamX = 0; camera.position.x = 0;
@@ -654,7 +658,6 @@
             setupScenePlanes();
             initButterflies();
             
-            // 稍作延遲確保畫面重置完成後再開始擷取串流
             setTimeout(() => {
                 startRecording();
                 isAnimating = true;
@@ -665,13 +668,15 @@
             const textValue = msgInput.value.trim();
             const encodedText = encodeURIComponent(textValue);
             const dateFlag = dateCheckbox.checked ? '1' : '0';
-            const shareUrl = `${window.location.origin}${window.location.pathname}?msg=${encodedText}&date=${dateFlag}`;
+            
+            // 關鍵修改：網址最後面強制附加 &hide=1
+            const shareUrl = `${window.location.origin}${window.location.pathname}?msg=${encodedText}&date=${dateFlag}&hide=1`;
             
             navigator.clipboard.writeText(shareUrl).then(() => {
                 const infoText = dateCheckbox.checked ? `「${textValue} + 日期」` : `「${textValue}」`;
-                alert(`自動收尾分享連結已複製！傳給朋友打開即可直接觀看：${infoText}`);
+                alert(`【純享版網址已複製】！\n點開的朋友將只會看到乾淨的 16:9 大畫面，點擊任何地方即可直接撥放驚喜：${infoText}`);
             }).catch(err => {
-                alert(`複製失敗，請手動複製此網址：\n${shareUrl}`);
+                alert(`複製失敗，請手動複製此純享版網址：\n${shareUrl}`);
             });
         });
 
